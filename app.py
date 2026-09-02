@@ -21,6 +21,7 @@ und Visualisierung liegen in eigenen battery_*.py-Modulen neben dieser Datei.
 import streamlit as st
 
 import battery_data
+import battery_permalink as permalink
 from battery_constants import (
     DEFAULT_CAPACITY_KWH,
     DEFAULT_EFFICIENCY,
@@ -49,16 +50,35 @@ st.caption(
     "(Bundesnetzagentur, öffentliche API), stündlich gemittelt aus Viertelstundenwerten."
 )
 
+MODE_LABELS = {permalink.MODE_PRESET: "📅 Beispieltag", permalink.MODE_LIVE: "🔴 Live von SMARD.de"}
+
+# Read the current URL's query parameters as defaults, so a shared link
+# (or a reload) reproduces the exact state it was copied from. Written back
+# further down, once every widget's actual value is known.
+query_params = dict(st.query_params)
+mode_default = permalink.parse_choice(query_params, permalink.PARAM_MODE, set(MODE_LABELS), permalink.MODE_PRESET)
+preset_default = permalink.parse_choice(query_params, permalink.PARAM_PRESET, set(PRICE_PRESETS), DEFAULT_PRESET)
+date_default = permalink.parse_date(query_params, permalink.PARAM_DATE)
+capacity_default = permalink.parse_float(query_params, permalink.PARAM_CAPACITY, 1.0, 50.0, DEFAULT_CAPACITY_KWH)
+max_rate_default = permalink.parse_float(query_params, permalink.PARAM_MAX_RATE, 0.5, 25.0, DEFAULT_MAX_RATE_KW)
+efficiency_default = permalink.parse_float(query_params, permalink.PARAM_EFFICIENCY, 0.5, 1.0, DEFAULT_EFFICIENCY)
+start_fraction_default = permalink.parse_float(query_params, permalink.PARAM_START_FRACTION, 0.0, 1.0, DEFAULT_START_SOC_FRACTION)
+
 source_mode = st.radio(
     "Strompreise",
-    ["📅 Beispieltag", "🔴 Live von SMARD.de"],
+    [MODE_LABELS[permalink.MODE_PRESET], MODE_LABELS[permalink.MODE_LIVE]],
+    index=list(MODE_LABELS).index(mode_default),
     horizontal=True,
     help="Beispieltage sind fest hinterlegt und funktionieren immer offline. "
          "Bei „Live von SMARD.de“ wird ein beliebiges Datum direkt von der SMARD-API geladen.",
 )
 
-if source_mode == "📅 Beispieltag":
-    preset_name = st.selectbox("Beispieltag laden", options=list(PRICE_PRESETS.keys()))
+preset_name = None
+selected_date = None
+
+if source_mode == MODE_LABELS[permalink.MODE_PRESET]:
+    preset_options = list(PRICE_PRESETS.keys())
+    preset_name = st.selectbox("Beispieltag laden", options=preset_options, index=preset_options.index(preset_default))
     prices = PRICE_PRESETS[preset_name]
     price_source_caption = f"Beispieltag: {preset_name}"
 else:
@@ -69,7 +89,8 @@ else:
         prices = PRICE_PRESETS[DEFAULT_PRESET]
         price_source_caption = f"Beispieltag (Fallback): {DEFAULT_PRESET}"
     else:
-        selected_date = st.date_input("Datum", value=max_date, min_value=min_date, max_value=max_date)
+        date_value = date_default if date_default and min_date <= date_default <= max_date else max_date
+        selected_date = st.date_input("Datum", value=date_value, min_value=min_date, max_value=max_date)
         try:
             with st.spinner(f"Lade Day-Ahead-Preise für {selected_date} von SMARD.de..."):
                 prices = battery_data.fetch_day_prices(selected_date)
@@ -82,16 +103,26 @@ else:
 
 with st.sidebar:
     st.header("⚙️ Batterie-Einstellungen")
-    capacity = st.slider("Kapazität (kWh)", 1.0, 50.0, DEFAULT_CAPACITY_KWH, step=0.5)
-    max_rate = st.slider("Max. Lade-/Entladeleistung (kW)", 0.5, 25.0, DEFAULT_MAX_RATE_KW, step=0.5)
+    capacity = st.slider("Kapazität (kWh)", 1.0, 50.0, capacity_default, step=0.5)
+    max_rate = st.slider("Max. Lade-/Entladeleistung (kW)", 0.5, 25.0, max_rate_default, step=0.5)
     efficiency = st.slider(
-        "Round-Trip-Wirkungsgrad", 0.5, 1.0, DEFAULT_EFFICIENCY, step=0.01,
+        "Round-Trip-Wirkungsgrad", 0.5, 1.0, efficiency_default, step=0.01,
         help="Anteil der Energie, der nach einem vollen Lade-Entlade-Zyklus noch nutzbar ist. "
              "Reale Batteriespeicher liegen meist zwischen 85 % und 95 %.",
     )
-    start_fraction = st.slider("Start-Ladezustand (Anteil der Kapazität)", 0.0, 1.0, DEFAULT_START_SOC_FRACTION, step=0.05)
+    start_fraction = st.slider("Start-Ladezustand (Anteil der Kapazität)", 0.0, 1.0, start_fraction_default, step=0.05)
+
+# Sync the resolved state back into the URL so the address bar is always a
+# working permalink for exactly what's currently shown.
+st.query_params.clear()
+st.query_params.update(permalink.build_params(
+    mode=permalink.MODE_LIVE if source_mode == MODE_LABELS[permalink.MODE_LIVE] else permalink.MODE_PRESET,
+    preset_name=preset_name, selected_date=selected_date,
+    capacity_kwh=capacity, max_rate_kw=max_rate, efficiency=efficiency, start_fraction=start_fraction,
+))
 
 st.caption(f"📊 {price_source_caption}")
+st.caption("🔗 Permalink: Die URL in der Adresszeile spiegelt genau diese Einstellungen wider und kann geteilt werden.")
 
 problem = build_problem(
     prices, capacity_kwh=capacity, max_rate_kw=max_rate,
@@ -147,24 +178,47 @@ auftauchen kann (dann rein optisch zu einer einzigen Nettozahl je Stunde zusamme
 with st.expander("📐 Mathematische Formulierung"):
     st.markdown(
         r"""
-**Zustandsgleichung** (Ladezustand $\text{SoC}_t$, Effizienz $\eta$ als $\sqrt{\eta}$ auf beide
-Richtungen aufgeteilt):
+**Entscheidungsvariablen** (für jede Stunde $t = 0, \dots, 23$):
 
-$$\text{SoC}_{t+1} = \text{SoC}_t + \text{charge}_t \sqrt{\eta} - \frac{\text{discharge}_t}{\sqrt{\eta}}$$
+| Symbol | Bedeutung |
+|---|---|
+| $\text{charge}_t \geq 0$ | in Stunde $t$ eingekaufte und eingeladene Energie (kWh) |
+| $\text{discharge}_t \geq 0$ | in Stunde $t$ entnommene und verkaufte Energie (kWh) |
+| $\text{SoC}_t$ | Ladezustand ("State of Charge") zu Beginn von Stunde $t$ (kWh) |
 
-**Optimierungsmodell:**
+**Zustandsgleichung — wie sich der Ladezustand von Stunde zu Stunde entwickelt:**
 
-$$\max \sum_t \text{price}_t \cdot (\text{discharge}_t - \text{charge}_t)$$
+$$\text{SoC}_{t+1} = \text{SoC}_t + \sqrt{\eta} \cdot \text{charge}_t - \frac{1}{\sqrt{\eta}} \cdot \text{discharge}_t$$
 
-unter $0 \leq \text{charge}_t, \text{discharge}_t \leq P_{\max}$, $0 \leq \text{SoC}_t \leq C$ für
-alle $t$, sowie $\text{SoC}_T \geq \text{SoC}_0$ (der Speicher darf am Ende des Tages nicht leerer
-sein als zu Beginn — sonst würde ein einzelner Tag bereits vorhandene, nicht heute bezahlte Energie
-„versilbern", was keine wiederholbare Tagesstrategie wäre).
+Ohne Verluste wäre das schlicht *Ladezustand + Eingeladenes − Ausgeladenes*. Der
+Round-Trip-Wirkungsgrad $\eta$ (z. B. 0,90 = 90 %) sagt aber, wie viel der eingeladenen Energie
+nach einem vollen Lade-Entlade-Zyklus tatsächlich noch nutzbar ist. Damit dieser eine Verlust
+nicht willkürlich nur einer Richtung zugeschlagen wird, verteilt ihn das Modell symmetrisch:
+$\sqrt{\eta}$ geht beim Laden "verloren", $\sqrt{\eta}$ nochmal beim Entladen — zusammen ergibt
+das für einen kompletten Zyklus wieder genau $\eta$.
 
-**Warum reicht ein LP?** Gleichzeitiges Laden und Entladen in derselben Stunde $t$ verändert den
-Gewinnbeitrag dieser Stunde exakt um 0 (Preis kürzt sich heraus), erhöht aber nie den Ladezustand
-in späteren Stunden. Es ist also bestenfalls neutral, nie eine echte Verbesserung nötig zu
-verhindern — eine binäre Variable dafür würde das Problem unnötig zu einem MILP machen.
+**Zielfunktion — Gewinn über alle 24 Stunden maximieren:**
+
+$$\max \sum_{t=0}^{23} \text{price}_t \cdot (\text{discharge}_t - \text{charge}_t)$$
+
+Verkaufserlös minus Einkaufskosten, Stunde für Stunde aufsummiert.
+
+**Nebenbedingungen:**
+
+- $0 \leq \text{charge}_t, \text{discharge}_t \leq P_{\max}$ — die Lade-/Entladeleistung ist durch die Anschlussleistung des Speichers begrenzt.
+- $0 \leq \text{SoC}_t \leq C$ für alle $t$ — der Ladezustand darf die Speicherkapazität $C$ nie unter- oder überschreiten.
+- $\text{SoC}_{24} \geq \text{SoC}_0$ — am Ende des Tages darf der Speicher nicht leerer sein als zu Beginn. Sonst könnte ein einzelner Tag bereits vorhandene, nicht heute bezahlte Energie „versilbern" — keine wiederholbare Tagesstrategie.
+
+**Warum genügt ein lineares Programm — ganz ohne Ganzzahligkeitsbedingung?**
+
+Man könnte vermuten, es brauche eine zusätzliche Regel, die verhindert, dass $\text{charge}_t$
+und $\text{discharge}_t$ in derselben Stunde beide positiv sind — ökonomisch wäre das ja unsinnig.
+Nötig ist sie aber nicht: Gleichzeitiges Laden und Entladen in Stunde $t$ verändert den
+Gewinnbeitrag dieser Stunde exakt um 0 (der Preis kürzt sich heraus), kann den späteren
+Ladezustand gegenüber nur einer der beiden Aktionen aber nie erhöhen. Es ist also bestenfalls
+gleichwertig, nie besser — der Solver hat gar keinen Anreiz dazu. Eine binäre Variable, die das
+explizit ausschließt, würde das Problem nur unnötig zu einem gemischt-ganzzahligen Programm
+(MILP) machen.
 """
     )
 

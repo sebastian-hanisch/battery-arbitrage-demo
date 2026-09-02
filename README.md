@@ -10,6 +10,8 @@ Verglichen wird eine naive "billig laden, teuer entladen"-Heuristik mit der LP-o
 
 Strompreise sind echte deutsche Day-Ahead-Preise von [SMARD.de](https://www.smard.de) (Bundesnetzagentur, öffentliche API), stündlich gemittelt aus Viertelstundenwerten — nicht synthetisch erzeugt. Neben den drei fest hinterlegten Beispieltagen kann wahlweise ein beliebiges Datum live von der SMARD-API geladen werden (`battery_data.py`); schlägt der Abruf fehl oder liegen für den Tag noch nicht alle Stundenwerte vor, fällt die Demo automatisch auf einen Beispieltag zurück.
 
+Jede Auswahl (Szenario, Datum, Batterie-Einstellungen) spiegelt sich als Permalink in der URL wider (`battery_permalink.py`) — ein kopierter Link reproduziert exakt denselben Zustand, ganz ohne eigenes Backend oder Session-Storage.
+
 ## Methodik
 
 - LP-Modell: SciPy `linprog` (HiGHS), Zustandsgleichung für den Ladezustand über alle 24 Stunden als Nebenbedingungen
