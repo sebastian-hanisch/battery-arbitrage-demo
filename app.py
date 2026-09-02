@@ -20,10 +20,12 @@ und Visualisierung liegen in eigenen battery_*.py-Modulen neben dieser Datei.
 
 import streamlit as st
 
+import battery_data
 from battery_constants import (
     DEFAULT_CAPACITY_KWH,
     DEFAULT_EFFICIENCY,
     DEFAULT_MAX_RATE_KW,
+    DEFAULT_PRESET,
     DEFAULT_START_SOC_FRACTION,
     PRICE_PRESETS,
 )
@@ -47,7 +49,36 @@ st.caption(
     "(Bundesnetzagentur, öffentliche API), stündlich gemittelt aus Viertelstundenwerten."
 )
 
-preset_name = st.selectbox("📅 Beispieltag laden", options=list(PRICE_PRESETS.keys()))
+source_mode = st.radio(
+    "Strompreise",
+    ["📅 Beispieltag", "🔴 Live von SMARD.de"],
+    horizontal=True,
+    help="Beispieltage sind fest hinterlegt und funktionieren immer offline. "
+         "Bei „Live von SMARD.de“ wird ein beliebiges Datum direkt von der SMARD-API geladen.",
+)
+
+if source_mode == "📅 Beispieltag":
+    preset_name = st.selectbox("Beispieltag laden", options=list(PRICE_PRESETS.keys()))
+    prices = PRICE_PRESETS[preset_name]
+    price_source_caption = f"Beispieltag: {preset_name}"
+else:
+    try:
+        min_date, max_date = battery_data.available_date_range()
+    except Exception as exc:
+        st.error(f"SMARD.de gerade nicht erreichbar ({exc}). Zeige stattdessen den Beispieltag „{DEFAULT_PRESET}“.")
+        prices = PRICE_PRESETS[DEFAULT_PRESET]
+        price_source_caption = f"Beispieltag (Fallback): {DEFAULT_PRESET}"
+    else:
+        selected_date = st.date_input("Datum", value=max_date, min_value=min_date, max_value=max_date)
+        try:
+            with st.spinner(f"Lade Day-Ahead-Preise für {selected_date} von SMARD.de..."):
+                prices = battery_data.fetch_day_prices(selected_date)
+        except battery_data.SmardUnavailableError as exc:
+            st.warning(f"Preise für {selected_date} nicht verfügbar ({exc}). Zeige stattdessen den Beispieltag „{DEFAULT_PRESET}“.")
+            prices = PRICE_PRESETS[DEFAULT_PRESET]
+            price_source_caption = f"Beispieltag (Fallback): {DEFAULT_PRESET}"
+        else:
+            price_source_caption = f"Live von SMARD.de: {selected_date.strftime('%d.%m.%Y')}"
 
 with st.sidebar:
     st.header("⚙️ Batterie-Einstellungen")
@@ -60,8 +91,10 @@ with st.sidebar:
     )
     start_fraction = st.slider("Start-Ladezustand (Anteil der Kapazität)", 0.0, 1.0, DEFAULT_START_SOC_FRACTION, step=0.05)
 
+st.caption(f"📊 {price_source_caption}")
+
 problem = build_problem(
-    PRICE_PRESETS[preset_name], capacity_kwh=capacity, max_rate_kw=max_rate,
+    prices, capacity_kwh=capacity, max_rate_kw=max_rate,
     efficiency=efficiency, start_soc_kwh=capacity * start_fraction,
 )
 

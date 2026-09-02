@@ -8,7 +8,7 @@ Die einzige Demo im Portfolio mit einem echten **Lager-/Speicherproblem über di
 
 Verglichen wird eine naive "billig laden, teuer entladen"-Heuristik mit der LP-optimalen Lösung, die den ganzen Tag gemeinsam betrachtet. Kernpunkt: Nichtstun (Gewinn 0) ist für die LP immer eine zulässige Option — die LP-Lösung kann also nie schlechter sein. Die naive Heuristik hat diese Garantie nicht und verliert in einem der drei Beispielszenarien tatsächlich Geld.
 
-Strompreise sind echte deutsche Day-Ahead-Preise von [SMARD.de](https://www.smard.de) (Bundesnetzagentur, öffentliche API), stündlich gemittelt aus Viertelstundenwerten — nicht synthetisch erzeugt.
+Strompreise sind echte deutsche Day-Ahead-Preise von [SMARD.de](https://www.smard.de) (Bundesnetzagentur, öffentliche API), stündlich gemittelt aus Viertelstundenwerten — nicht synthetisch erzeugt. Neben den drei fest hinterlegten Beispieltagen kann wahlweise ein beliebiges Datum live von der SMARD-API geladen werden (`battery_data.py`); schlägt der Abruf fehl oder liegen für den Tag noch nicht alle Stundenwerte vor, fällt die Demo automatisch auf einen Beispieltag zurück.
 
 ## Methodik
 
