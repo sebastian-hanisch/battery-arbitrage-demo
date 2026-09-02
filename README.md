@@ -2,6 +2,8 @@
 
 Interaktive Demo zur Batteriespeicher-Arbitrage: Anhand echter deutscher Day-Ahead-Strompreise wird der gewinnmaximale Lade-/Entladeplan für einen Batteriespeicher gesucht — mit möglichst hohem Gewinn.
 
+**[→ Demo live ausprobieren](https://sebastianhanisch-battery-arbitrage-demo.streamlit.app/)**
+
 ## Worum geht's?
 
 Die einzige Demo im Portfolio mit einem echten **Lager-/Speicherproblem über die Zeit**: Der Ladezustand entwickelt sich Stunde für Stunde durch die eigenen Lade-/Entladeentscheidungen, statt (wie bei den anderen Demos) eine feste Menge auf feste Ressourcen zu verteilen.
