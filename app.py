@@ -150,9 +150,9 @@ if naive_result.profit < 0:
 
 tab_lp, tab_naive = st.tabs(["LP-optimal", "Naive Heuristik"])
 with tab_lp:
-    st.plotly_chart(schedule_figure(problem, net_flow(lp_result), lp_result.soc, "Lade-/Entladeplan (LP-optimal)"), use_container_width=True, key="schedule_lp")
+    st.plotly_chart(schedule_figure(problem, net_flow(lp_result), lp_result.soc, "Lade-/Entladeplan (LP-optimal)"), width="stretch", key="schedule_lp")
 with tab_naive:
-    st.plotly_chart(schedule_figure(problem, net_flow(naive_result), naive_result.soc, "Lade-/Entladeplan (naive Heuristik)"), use_container_width=True, key="schedule_naive")
+    st.plotly_chart(schedule_figure(problem, net_flow(naive_result), naive_result.soc, "Lade-/Entladeplan (naive Heuristik)"), width="stretch", key="schedule_naive")
 
 with st.expander("❓ Wie funktioniert diese Demo?"):
     st.markdown(
