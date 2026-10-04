@@ -135,7 +135,7 @@ with st.spinner("Löse..."):
 
 st.markdown("## 🎯 Ergebnis im Vergleich")
 m1, m2, m3 = st.columns(3)
-m1.metric("Naive Heuristik", f"{naive_result.profit:.2f} €", help="Lädt in den günstigsten, entlädt in den teuersten Stunden des Tages - ohne Rücksicht auf den Ladezustandsverlauf.")
+m1.metric("Naive Heuristik", f"{naive_result.profit:.2f} €", help="Lädt in den günstigsten, entlädt in den teuersten Stunden des Tages - Stunden allein nach Preisrang gewählt (unteres/oberes Drittel), ohne vorausschauende Planung.")
 m2.metric("LP-optimal", f"{lp_result.profit:.2f} €", help="Berücksichtigt alle 24 Stunden gemeinsam inkl. Kapazitäts-, Leistungs- und Wirkungsgradgrenzen.")
 diff = lp_result.profit - naive_result.profit
 m3.metric("Zusätzlicher Gewinn", f"{diff:.2f} €", delta=f"{100 * diff / abs(naive_result.profit):.0f} %" if abs(naive_result.profit) > 1e-6 else None)
@@ -162,9 +162,9 @@ with st.expander("❓ Wie funktioniert diese Demo?"):
 Wirkungsgradverlust bei jedem Zyklus. Gesucht ist der Lade-/Entladeplan über 24 Stunden, der den
 Gewinn maximiert.
 
-**Naive Heuristik:** Sortiert die Stunden nach Preis, lädt in den günstigsten, entlädt in den
-teuersten — ohne zu prüfen, ob der Ladezustand das an der jeweiligen Stelle überhaupt hergibt, und
-ohne die Reihenfolge der Stunden zu berücksichtigen.
+**Naive Heuristik:** Sortiert die Stunden nach Preis, lädt im günstigsten Drittel, entlädt im
+teuersten Drittel der Stunden — und zwar der Reihe nach, soweit Ladezustand und Leistung es gerade
+hergeben. Welche Stunden sich über den ganzen Tag zusammen am meisten lohnen, prüft sie nicht.
 
 **LP-optimal:** Ein lineares Programm über alle 24 Stunden gleichzeitig, das den Ladezustand
 Stunde für Stunde exakt mitführt. Weil jeder Zyklus durch den Wirkungsgradverlust Geld kostet,
@@ -226,6 +226,6 @@ st.markdown("---")
 
 st.caption(
     "Diese Demo ist Teil des Portfolios von [Sebastian Hanisch](https://sebastianhanisch.net) – "
-    "Operations Research und Machine Learning. Interesse an einer maßgeschneiderten Lösung für "
-    "Ihr Unternehmen? [Kontakt aufnehmen](https://sebastianhanisch.net/kontakt.html)"
+    "Operations Research und Machine Learning ([Über mich](https://sebastianhanisch.net/ueber-mich.html)). "
+    "Mehr zu den Demos: [Interaktive Demos](https://sebastianhanisch.net/demos.html)."
 )
