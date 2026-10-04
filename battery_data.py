@@ -72,11 +72,15 @@ def available_date_range() -> tuple[datetime.date, datetime.date]:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_day_prices(day: datetime.date) -> list[float]:
-    """Returns 24 hourly EUR/MWh prices for `day` (German local calendar
-    day), averaged from SMARD's quarter-hourly data. Raises
+    """Returns one hourly EUR/MWh price per elapsed hour of `day` (German
+    local calendar day), averaged from SMARD's quarter-hourly data: 24
+    prices on a normal day, 23 on the spring DST change (2026-03-29) and 25
+    on the autumn one (2026-10-25). Raises
     SmardUnavailableError if the day isn't available or isn't fully
     published (e.g. a future date, or missing/null values)."""
     day_start_ms, day_end_ms = _local_day_bounds_ms(day)
+    # The day's length comes from the tz-aware bounds (23/24/25 h), not from a fixed 24.
+    n_hours = round((day_end_ms - day_start_ms) / 3_600_000)
 
     try:
         timestamps = _fetch_index()
@@ -96,13 +100,13 @@ def fetch_day_prices(day: datetime.date) -> list[float]:
         except requests.RequestException as exc:
             raise SmardUnavailableError(f"SMARD-Daten nicht erreichbar: {exc}") from exc
 
-    hourly_sums = [0.0] * 24
-    hourly_counts = [0] * 24
+    hourly_sums = [0.0] * n_hours
+    hourly_counts = [0] * n_hours
     for ts, price in points:
         if price is None or not (day_start_ms <= ts < day_end_ms):
             continue
         hour = int((ts - day_start_ms) // 3_600_000)
-        if 0 <= hour < 24:
+        if 0 <= hour < n_hours:
             hourly_sums[hour] += price
             hourly_counts[hour] += 1
 

@@ -8,11 +8,13 @@ wird der gewinnmaximale Lade-/Entladeplan für einen Batteriespeicher gesucht
 Blick auf den tatsächlichen Ladezustandsverlauf.
 
 Kernpunkt: Weil jeder Lade-/Entladezyklus durch den Wirkungsgradverlust Geld
-kostet, lohnt sich gleichzeitiges Laden und Entladen in derselben Stunde nie
-- ohne dass dafür eine Ganzzahligkeitsbedingung nötig wäre. Das lineare
-Programm ist außerdem beweisbar nie schlechter als Nichtstun (Gewinn 0 ist
-immer zulässig) - die naive Heuristik hat diese Garantie nicht und verliert
-in einem der Beispielszenarien tatsächlich Geld.
+kostet, lohnt sich gleichzeitiges Laden und Entladen in derselben Stunde bei
+Preisen ab 0 nie - dafür ist keine Ganzzahligkeitsbedingung nötig. Nur bei
+negativen Preisen würde das reine LP die Verlustenergie gegen Bezahlung
+"verbrennen"; dann rechnet die Demo exakt mit einem kleinen MILP weiter
+(Laden ODER Entladen je Stunde). Die Lösung ist beweisbar nie schlechter als
+Nichtstun (Gewinn 0 ist immer zulässig) - die naive Heuristik hat diese
+Garantie nicht und verliert in einem der Beispielszenarien tatsächlich Geld.
 
 Code-Struktur wie bei den anderen Demos in diesem Workspace: Modell, Solver
 und Visualisierung liegen in eigenen battery_*.py-Modulen neben dieser Datei.
@@ -100,6 +102,8 @@ else:
             price_source_caption = f"Beispieltag (Fallback): {DEFAULT_PRESET}"
         else:
             price_source_caption = f"Live von SMARD.de: {selected_date.strftime('%d.%m.%Y')}"
+            if len(prices) != 24:
+                price_source_caption += f" (Zeitumstellung: Tag mit {len(prices)} Stunden)"
 
 with st.sidebar:
     st.header("⚙️ Batterie-Einstellungen")
@@ -167,11 +171,14 @@ teuersten Drittel der Stunden — und zwar der Reihe nach, soweit Ladezustand un
 hergeben. Welche Stunden sich über den ganzen Tag zusammen am meisten lohnen, prüft sie nicht.
 
 **LP-optimal:** Ein lineares Programm über alle 24 Stunden gleichzeitig, das den Ladezustand
-Stunde für Stunde exakt mitführt. Weil jeder Zyklus durch den Wirkungsgradverlust Geld kostet,
-lohnt sich gleichzeitiges Laden und Entladen in derselben Stunde nie wirklich besser als eine der
-beiden Aktionen allein — die Lösung braucht deshalb keine Ganzzahligkeitsbedingung, um das
-auszuschließen, obwohl sie in seltenen Fällen als eine von mehreren gleich guten Darstellungen
-auftauchen kann (dann rein optisch zu einer einzigen Nettozahl je Stunde zusammengefasst).
+Stunde für Stunde exakt mitführt. Bei Preisen ab 0 €/MWh lohnt sich gleichzeitiges Laden und
+Entladen in derselben Stunde nie wirklich besser als eine der beiden Aktionen allein — das LP
+braucht dort keine Ganzzahligkeitsbedingung (höchstens als gleich gute Darstellung, dann rein
+optisch zu einer einzigen Nettozahl je Stunde zusammengefasst). Bei negativen Preisen gilt das
+nicht: Das reine LP könnte gleichzeitig laden und entladen und so die Verlustenergie gegen
+Bezahlung „verbrennen“. Taucht das in der LP-Lösung auf, löst die Demo stattdessen ein kleines
+gemischt-ganzzahliges Programm (MILP) mit einem Schalter „laden oder entladen“ je Stunde — der
+exakte Bestwert für einen real betreibbaren Speicher.
 """
     )
 
@@ -209,16 +216,24 @@ Verkaufserlös minus Einkaufskosten, Stunde für Stunde aufsummiert.
 - $0 \leq \text{SoC}_t \leq C$ für alle $t$ — der Ladezustand darf die Speicherkapazität $C$ nie unter- oder überschreiten.
 - $\text{SoC}_{24} \geq \text{SoC}_0$ — am Ende des Tages darf der Speicher nicht leerer sein als zu Beginn. Sonst könnte ein einzelner Tag bereits vorhandene, nicht heute bezahlte Energie „versilbern" — keine wiederholbare Tagesstrategie.
 
-**Warum genügt ein lineares Programm — ganz ohne Ganzzahligkeitsbedingung?**
+**Wann genügt ein lineares Programm — und wann nicht?**
 
 Man könnte vermuten, es brauche eine zusätzliche Regel, die verhindert, dass $\text{charge}_t$
 und $\text{discharge}_t$ in derselben Stunde beide positiv sind — ökonomisch wäre das ja unsinnig.
-Nötig ist sie aber nicht: Gleichzeitiges Laden und Entladen in Stunde $t$ verändert den
-Gewinnbeitrag dieser Stunde exakt um 0 (der Preis kürzt sich heraus), kann den späteren
-Ladezustand gegenüber nur einer der beiden Aktionen aber nie erhöhen. Es ist also bestenfalls
-gleichwertig, nie besser — der Solver hat gar keinen Anreiz dazu. Eine binäre Variable, die das
-explizit ausschließt, würde das Problem nur unnötig zu einem gemischt-ganzzahligen Programm
-(MILP) machen.
+Bei Preisen $\text{price}_t \geq 0$ ist sie tatsächlich nicht nötig: Ersetzt man ein gleichzeitiges
+Paar durch die eine Nettoaktion mit demselben Ladezustand danach, wächst der Gewinn dieser Stunde
+um $\text{price}_t \cdot (1/\eta - 1) \cdot \text{discharge}_t \geq 0$ (bei $\eta = 1$ oder Preis 0 ein
+exaktes Unentschieden). Das Paar ist also bestenfalls gleichwertig, nie besser — der Solver hat
+keinen Anreiz dazu.
+
+Bei **negativen Preisen** kippt das Argument: Wer in einer Stunde mit $\text{price}_t < 0$
+gleichzeitig lädt und genau so viel entlädt, dass der Ladezustand gleich bleibt, wird für die
+eingekaufte Energie bezahlt und zahlt für die verkaufte weniger — er „verbrennt“ den
+Wirkungsgradverlust gegen Geld, sogar bei vollem Speicher. Das ist physikalisch nicht betreibbar.
+Deshalb prüft die Demo die LP-Lösung auf solche Stunden und löst bei Bedarf ein MILP mit einer
+binären Variablen $z_t$ (1 = Laden erlaubt): $\text{charge}_t \leq P_{\max} \, z_t$ und
+$\text{discharge}_t \leq P_{\max} \, (1 - z_t)$. Im Beispieltag „Negative Preise“ sinkt der Bestwert
+dadurch von 1,8132 € (reines LP, nicht betreibbar) auf 1,8060 €.
 """
     )
 
