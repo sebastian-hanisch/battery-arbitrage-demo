@@ -214,7 +214,7 @@ Verkaufserlös minus Einkaufskosten, Stunde für Stunde aufsummiert.
 
 - $0 \leq \text{charge}_t, \text{discharge}_t \leq P_{\max}$ — die Lade-/Entladeleistung ist durch die Anschlussleistung des Speichers begrenzt.
 - $0 \leq \text{SoC}_t \leq C$ für alle $t$ — der Ladezustand darf die Speicherkapazität $C$ nie unter- oder überschreiten.
-- $\text{SoC}_{24} \geq \text{SoC}_0$ — am Ende des Tages darf der Speicher nicht leerer sein als zu Beginn. Sonst könnte ein einzelner Tag bereits vorhandene, nicht heute bezahlte Energie „versilbern" — keine wiederholbare Tagesstrategie.
+- $\text{SoC}_{24} \geq \text{SoC}_0$ — am Ende des Tages darf der Speicher nicht leerer sein als zu Beginn. Sonst könnte ein einzelner Tag bereits vorhandene, nicht heute bezahlte Energie „versilbern“ — keine wiederholbare Tagesstrategie.
 
 **Wann genügt ein lineares Programm — und wann nicht?**
 
